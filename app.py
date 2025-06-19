@@ -58,6 +58,16 @@ def create_shuffled_docx_and_answers(questions):
                 answer_key.append(f"{idx}) {letter}")
     return new_doc, answer_key
 
+def initialize_exam(questions):
+    st.session_state.started = True
+    st.session_state.questions = questions
+    st.session_state.current = 0
+    st.session_state.answers = [None] * len(questions)  # cavablar üçün yer
+    st.session_state.correct_answers = [q[1][0] for q in questions]  # hər sualın düzgün cavabı
+    st.session_state.start_time = datetime.now()
+    st.session_state.timer_expired = False
+    st.session_state.retry_mode = False  # Yenidən imtahan rejimi üçün
+
 # --- İstifadəçi interfeysi ---
 st.sidebar.title("🔧 Menyu")
 menu = st.sidebar.radio("➡️ Zəhmət olmasa rejim seçin:", ["🎲 Sualları Qarışdır", "📝 İmtahan Rejimi"])
@@ -102,108 +112,95 @@ elif menu == "📝 İmtahan Rejimi":
             if "50" in mode:
                 questions = random.sample(questions, min(50, len(questions)))
 
-            # İmtahan rejimi üçün ilkin vəziyyət
-            if "started" not in st.session_state:
-                st.session_state.started = False
-                st.session_state.questions = questions
-                st.session_state.current = 0
-                st.session_state.answers = []
-                st.session_state.correct_answers = []
-                st.session_state.start_time = None
-                st.session_state.timer_expired = False
-                st.session_state.exam_mode = "main" # əsas imtahan rejimi
+            # Yenidən imtahan rejimi üçün suallar (səhvlərdən ibarət)
+            if "retry_questions" in st.session_state and st.session_state.retry_mode:
+                questions = st.session_state.retry_questions
 
-            # Başlanğıc ekranı
-            if not st.session_state.started:
+            if "started" not in st.session_state or not st.session_state.started:
+                initialize_exam(questions)
+
+            now = datetime.now()
+            time_left = timedelta(minutes=60) - (now - st.session_state.start_time)
+            if time_left.total_seconds() <= 0:
+                st.session_state.timer_expired = True
+
+            if not st.session_state.retry_mode:
                 st.info("📌 60 dəqiqə vaxtınız olacaq. Hazırsınızsa başlayın!")
+
+            # İmtahan hələ başlamayıbsa
+            if not st.session_state.started:
                 if st.button("🚀 Başla"):
-                    st.session_state.started = True
-                    st.session_state.start_time = datetime.now()
+                    initialize_exam(questions)
                     st.experimental_rerun()
 
-            # İmtahan zamanı
-            elif st.session_state.started:
-                now = datetime.now()
-                time_left = timedelta(minutes=60) - (now - st.session_state.start_time)
-                if time_left.total_seconds() <= 0:
-                    st.session_state.timer_expired = True
+            elif st.session_state.timer_expired:
+                st.warning("⏰ Vaxt bitdi! İmtahan sona çatdı.")
+                st.session_state.current = len(st.session_state.questions)
 
-                if st.session_state.timer_expired:
-                    st.warning("⏰ Vaxt bitdi! İmtahan sona çatdı.")
-                    st.session_state.current = len(st.session_state.questions)
+            else:
+                mins, secs = divmod(int(time_left.total_seconds()), 60)
+                st.info(f"⏳ Qalan vaxt: {mins} dəq {secs} san")
+
+            idx = st.session_state.current
+            total = len(st.session_state.questions)
+
+            if idx < total:
+                qtext, options = st.session_state.questions[idx]
+                correct = options[0]
+                if f"shuffled_{idx}" not in st.session_state:
+                    shuffled = options[:]
+                    random.shuffle(shuffled)
+                    st.session_state[f"shuffled_{idx}"] = shuffled
                 else:
-                    mins, secs = divmod(int(time_left.total_seconds()), 60)
-                    st.info(f"⏳ Qalan vaxt: {mins} dəq {secs} san")
+                    shuffled = st.session_state[f"shuffled_{idx}"]
 
-                idx = st.session_state.current
-                total = len(st.session_state.questions)
-                if idx < total:
-                    qtext, options = st.session_state.questions[idx]
-                    correct = options[0]
-                    if f"shuffled_{idx}" not in st.session_state:
-                        shuffled = options[:]
-                        random.shuffle(shuffled)
-                        st.session_state[f"shuffled_{idx}"] = shuffled
-                    else:
-                        shuffled = st.session_state[f"shuffled_{idx}"]
+                st.progress((idx) / total)
+                st.markdown(f"**{idx+1}) {qtext}**")
 
-                    # Proqres çubuğu
-                    st.progress((idx / total))
+                # Radio-da əvvəlcə heç seçim olmaması üçün index=-1 ilə
+                selected = st.radio("📌 Cavab seçin:", shuffled, index=-1, key=f"answer_{idx}")
 
-                    st.markdown(f"**{idx+1}) {qtext}**")
-                    selected = st.radio("📌 Cavab seçin:", shuffled, key=f"answer_{idx}")
+                col1, col2, col3 = st.columns(3)
+                clicked_button = None
 
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        if st.button("⬅️ Əvvəlki", disabled=idx == 0):
-                            st.session_state.current -= 1
-                            st.experimental_rerun()
-                    with col2:
-                        if st.button("🚩 Bitir"):
-                            st.session_state.current = len(st.session_state.questions)
-                            st.experimental_rerun()
-                    with col3:
-                        if st.button("➡️ Növbəti", disabled=(selected is None)):
-                            # Cavabları yadda saxla və növbəti suala keç
-                            if len(st.session_state.answers) <= idx:
-                                st.session_state.answers.append(selected)
-                                st.session_state.correct_answers.append(correct)
-                            else:
-                                st.session_state.answers[idx] = selected
-                                st.session_state.correct_answers[idx] = correct
-                            st.session_state.current += 1
-                            st.experimental_rerun()
-                else:
-                    # İmtahan bitdi - nəticələr göstər
-                    st.success("🎉 İmtahan tamamlandı!")
-                    score = sum(1 for a, b in zip(st.session_state.answers, st.session_state.correct_answers) if a == b)
-                    total = len(st.session_state.questions)
-                    percent = (score / total) * 100
-                    st.markdown(f"### ✅ Nəticə: {score} düzgün cavab / {total} sual")
-                    st.markdown(f"### 📈 Doğruluq faizi: **{percent:.2f}%**")
-                    st.progress(score / total)
+                with col1:
+                    if st.button("⬅️ Əvvəlki", key="prev_btn", disabled=idx == 0):
+                        clicked_button = "prev"
+                with col2:
+                    if st.button("🚩 Bitir", key="finish_btn"):
+                        clicked_button = "finish"
+                with col3:
+                    if st.button("➡️ Növbəti", key="next_btn"):
+                        clicked_button = "next"
 
-                    with st.expander("📊 Detallı nəticələr"):
-                        for i, (ua, ca, q) in enumerate(zip(st.session_state.answers, st.session_state.correct_answers, st.session_state.questions)):
-                            status = "✅ Düzgün" if ua == ca else "❌ Səhv"
-                            st.markdown(f"**{i+1}) {q[0]}**\n• Sənin cavabın: `{ua}`\n• Doğru cavab: `{ca}` → {status}")
+                # Düymə idarəsi
+                if clicked_button == "prev":
+                    if idx > 0:
+                        st.session_state.current -= 1
+                    st.experimental_rerun()
 
-                    # Yanlış cavab verilən suallar üçün siyahı
-                    wrong_questions = [
-                        q for (q, a, ca) in zip(st.session_state.questions, st.session_state.answers, st.session_state.correct_answers) if a != ca
-                    ]
+                elif clicked_button == "finish":
+                    st.session_state.current = total
+                    st.experimental_rerun()
 
-                    # Yanlış sualları yenidən sınaq üçün düymə
-                    if wrong_questions and st.session_state.exam_mode == "main":
-                        if st.button("🔄 Yanlış cavablandırılan sualları yenidən sınayın"):
-                            st.session_state.questions = wrong_questions
-                            st.session_state.answers = []
-                            st.session_state.current = 0
-                            st.session_state.started = True
-                            st.session_state.exam_mode = "retry"
-                            st.session_state.start_time = datetime.now()
-                            st.session_state.timer_expired = False
-                            st.experimental_rerun()
+                elif clicked_button == "next":
+                    # Cavabı yadda saxla, boş ola bilər
+                    st.session_state.answers[idx] = selected
+                    st.session_state.correct_answers[idx] = correct
+                    if idx + 1 < total:
+                        st.session_state.current += 1
+                    st.experimental_rerun()
 
-                    if st.button("🔁 Yenidən Başla"):
-                        for key in list(st.session_state.keys()):
+            else:
+                # İmtahan bitdi, nəticələr
+                st.success("🎉 İmtahan tamamlandı!")
+                score = 0
+                for a, b in zip(st.session_state.answers, st.session_state.correct_answers):
+                    if a == b:
+                        score += 1
+                percent = (score / total) * 100 if total > 0 else 0
+                st.markdown(f"### ✅ Nəticə: {score} düzgün cavab / {total} sual")
+                st.markdown(f"### 📈 Doğruluq faizi: **{percent:.2f}%**")
+                st.progress(score / total)
+
+                with st.expander("📊 Detallı nəticələr"):
