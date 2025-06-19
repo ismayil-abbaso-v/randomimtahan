@@ -102,26 +102,26 @@ elif menu == "📝 İmtahan Rejimi":
             if "50" in mode:
                 questions = random.sample(questions, min(50, len(questions)))
 
-            # Yanlış cavablarla yenidən imtahan üçün xüsusi açar yoxdursa, əsas imtahan rejimi başlayır
-            if "exam_mode" not in st.session_state:
-                st.session_state.exam_mode = "main" # "main" və ya "retry"
-
+            # İmtahan rejimi üçün ilkin vəziyyət
             if "started" not in st.session_state:
                 st.session_state.started = False
                 st.session_state.questions = questions
                 st.session_state.current = 0
                 st.session_state.answers = []
-                st.session_state.correct_answers = [opts[0] for _, opts in questions]
+                st.session_state.correct_answers = []
                 st.session_state.start_time = None
                 st.session_state.timer_expired = False
+                st.session_state.exam_mode = "main" # əsas imtahan rejimi
 
+            # Başlanğıc ekranı
             if not st.session_state.started:
                 st.info("📌 60 dəqiqə vaxtınız olacaq. Hazırsınızsa başlayın!")
                 if st.button("🚀 Başla"):
                     st.session_state.started = True
                     st.session_state.start_time = datetime.now()
-                    st.rerun()
+                    st.experimental_rerun()
 
+            # İmtahan zamanı
             elif st.session_state.started:
                 now = datetime.now()
                 time_left = timedelta(minutes=60) - (now - st.session_state.start_time)
@@ -157,43 +157,53 @@ elif menu == "📝 İmtahan Rejimi":
                     with col1:
                         if st.button("⬅️ Əvvəlki", disabled=idx == 0):
                             st.session_state.current -= 1
-                            st.rerun()
+                            st.experimental_rerun()
                     with col2:
                         if st.button("🚩 Bitir"):
                             st.session_state.current = len(st.session_state.questions)
-                            st.rerun()
+                            st.experimental_rerun()
                     with col3:
                         if st.button("➡️ Növbəti", disabled=(selected is None)):
+                            # Cavabları yadda saxla və növbəti suala keç
                             if len(st.session_state.answers) <= idx:
                                 st.session_state.answers.append(selected)
-                                st.session_state.correct_answers[idx] = correct
+                                st.session_state.correct_answers.append(correct)
                             else:
                                 st.session_state.answers[idx] = selected
                                 st.session_state.correct_answers[idx] = correct
                             st.session_state.current += 1
-                            st.rerun()
+                            st.experimental_rerun()
                 else:
+                    # İmtahan bitdi - nəticələr göstər
                     st.success("🎉 İmtahan tamamlandı!")
                     score = sum(1 for a, b in zip(st.session_state.answers, st.session_state.correct_answers) if a == b)
                     total = len(st.session_state.questions)
-                    percent = (score / total) * 100 if total > 0 else 0
+                    percent = (score / total) * 100
                     st.markdown(f"### ✅ Nəticə: {score} düzgün cavab / {total} sual")
                     st.markdown(f"### 📈 Doğruluq faizi: **{percent:.2f}%**")
-                    st.progress(score / total if total > 0 else 0)
+                    st.progress(score / total)
 
                     with st.expander("📊 Detallı nəticələr"):
                         for i, (ua, ca, q) in enumerate(zip(st.session_state.answers, st.session_state.correct_answers, st.session_state.questions)):
                             status = "✅ Düzgün" if ua == ca else "❌ Səhv"
                             st.markdown(f"**{i+1}) {q[0]}**\n• Sənin cavabın: `{ua}`\n• Doğru cavab: `{ca}` → {status}")
 
-                    # Yanlış cavab verilən sualları ayırırıq
+                    # Yanlış cavab verilən suallar üçün siyahı
                     wrong_questions = [
-                        (q, opts)
-                        for i, (ua, ca, (q, opts)) in enumerate(zip(st.session_state.answers, st.session_state.correct_answers, st.session_state.questions))
-                        if ua != ca
+                        q for (q, a, ca) in zip(st.session_state.questions, st.session_state.answers, st.session_state.correct_answers) if a != ca
                     ]
 
-                    # Yanlış cavab verilən suallar varsa, yenidən imtahan düyməsi göstəririk
+                    # Yanlış sualları yenidən sınaq üçün düymə
                     if wrong_questions and st.session_state.exam_mode == "main":
                         if st.button("🔄 Yanlış cavablandırılan sualları yenidən sınayın"):
-                            #
+                            st.session_state.questions = wrong_questions
+                            st.session_state.answers = []
+                            st.session_state.current = 0
+                            st.session_state.started = True
+                            st.session_state.exam_mode = "retry"
+                            st.session_state.start_time = datetime.now()
+                            st.session_state.timer_expired = False
+                            st.experimental_rerun()
+
+                    if st.button("🔁 Yenidən Başla"):
+                        for key in list(st.session_state.keys()):
