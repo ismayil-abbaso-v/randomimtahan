@@ -2,10 +2,21 @@ import streamlit as st
 import json
 import os
 import hashlib
+import uuid
+from streamlit_cookies_manager import EncryptedCookieManager
 
 st.set_page_config(page_title="Login Sistemi", page_icon="🔐")
 
 USERS_FILE = "users.json"
+
+# ------------------ COOKIE SİSTEMİ ------------------
+cookies = EncryptedCookieManager(
+    prefix="imtahan_app",
+    password="super_secret_key_123"  # istəsən bunu dəyiş
+)
+
+if not cookies.ready():
+    st.stop()
 
 # ------------------ USER YÜKLƏ ------------------
 def load_users():
@@ -55,6 +66,7 @@ def login_page():
 
     username = st.text_input("İstifadəçi adı", key="login_user")
     password = st.text_input("Şifrə", type="password", key="login_pass")
+    remember = st.checkbox("🖥️ Bu cihazı xatırla")
 
     if st.button("Daxil ol", key="login_btn"):
         users = load_users()
@@ -63,6 +75,13 @@ def login_page():
         if username in users and users[username] == hashed:
             st.session_state.logged_in = True
             st.session_state.user = username
+
+            if remember:
+                token = str(uuid.uuid4())
+                cookies["remember_user"] = username
+                cookies["remember_token"] = token
+                cookies.save()
+
             st.success(f"Xoş gəldin, {username}!")
             st.rerun()
         else:
@@ -75,6 +94,9 @@ def dashboard():
 
     if st.button("Çıxış et", key="logout_btn"):
         st.session_state.logged_in = False
+        cookies.pop("remember_user", None)
+        cookies.pop("remember_token", None)
+        cookies.save()
         st.rerun()
 
 # ------------------ ƏSAS ------------------
@@ -82,7 +104,13 @@ def main():
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
 
-    st.title("🔐 İstifadəçi Sistemi (Müstəqil Test)")
+    # Avtomatik giriş (cihaz xatırlanıbsa)
+    if not st.session_state.logged_in:
+        if "remember_user" in cookies:
+            st.session_state.logged_in = True
+            st.session_state.user = cookies["remember_user"]
+
+    st.title("🔐 İstifadəçi Sistemi")
 
     if st.session_state.logged_in:
         dashboard()
