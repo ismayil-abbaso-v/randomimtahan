@@ -1,31 +1,31 @@
 import streamlit as st
 import json
-import bcrypt
 import os
+import hashlib
 
-st.set_page_config(page_title="İstifadəçi Girişi", page_icon="🔐")
+st.set_page_config(page_title="Login Sistemi", page_icon="🔐")
 
 USERS_FILE = "users.json"
 
-# ---------------- FAYL YOXLA ----------------
+# ------------------ USER YÜKLƏ ------------------
 def load_users():
     if not os.path.exists(USERS_FILE):
         return {}
-    with open(USERS_FILE, "r") as f:
-        return json.load(f)
+    try:
+        with open(USERS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
 
 def save_users(users):
-    with open(USERS_FILE, "w") as f:
+    with open(USERS_FILE, "w", encoding="utf-8") as f:
         json.dump(users, f, indent=4)
 
-# ---------------- ŞİFRƏ ----------------
+# ------------------ ŞİFRƏ HASH ------------------
 def hash_password(password):
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    return hashlib.sha256(password.encode()).hexdigest()
 
-def check_password(password, hashed):
-    return bcrypt.checkpw(password.encode(), hashed.encode())
-
-# ---------------- QEYDİYYAT ----------------
+# ------------------ QEYDİYYAT ------------------
 def register_page():
     st.subheader("📝 Qeydiyyat")
 
@@ -47,9 +47,9 @@ def register_page():
         else:
             users[username] = hash_password(password)
             save_users(users)
-            st.success("Hesab yaradıldı! İndi giriş et")
+            st.success("✅ Hesab yaradıldı! İndi giriş et")
 
-# ---------------- GİRİŞ ----------------
+# ------------------ GİRİŞ ------------------
 def login_page():
     st.subheader("🔑 Giriş")
 
@@ -58,32 +58,33 @@ def login_page():
 
     if st.button("Daxil ol"):
         users = load_users()
+        hashed = hash_password(password)
 
-        if username in users and check_password(password, users[username]):
-            st.session_state["logged_in"] = True
-            st.session_state["user"] = username
+        if username in users and users[username] == hashed:
+            st.session_state.logged_in = True
+            st.session_state.user = username
             st.success(f"Xoş gəldin, {username}!")
             st.rerun()
         else:
             st.error("İstifadəçi adı və ya şifrə səhvdir")
 
-# ---------------- PANEL ----------------
+# ------------------ PANEL ------------------
 def dashboard():
-    st.success(f"✅ Sistemə giriş edildi: {st.session_state['user']}")
-    st.write("Bura sənin əsas proqramunun test sahəsi olacaq")
+    st.success(f"✅ Giriş edildi: {st.session_state.user}")
+    st.write("Bu test panelidir — əsas proqram burada olacaq")
 
     if st.button("Çıxış et"):
-        st.session_state["logged_in"] = False
+        st.session_state.logged_in = False
         st.rerun()
 
-# ---------------- ƏSAS ----------------
+# ------------------ ƏSAS ------------------
 def main():
     if "logged_in" not in st.session_state:
-        st.session_state["logged_in"] = False
+        st.session_state.logged_in = False
 
-    st.title("🔐 İstifadəçi Sistemi (Test)")
+    st.title("🔐 İstifadəçi Sistemi (Müstəqil Test)")
 
-    if st.session_state["logged_in"]:
+    if st.session_state.logged_in:
         dashboard()
     else:
         tab1, tab2 = st.tabs(["Giriş", "Qeydiyyat"])
