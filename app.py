@@ -7,7 +7,9 @@ from streamlit_cookies_manager import EncryptedCookieManager
 
 st.set_page_config(page_title="Login Sistemi", page_icon="🔐")
 
-USERS_FILE = "users.json"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+USERS_FILE = os.path.join(BASE_DIR, "users.json")
+
 
 # ------------------ COOKIE SİSTEMİ ------------------
 cookies = EncryptedCookieManager(
