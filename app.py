@@ -3,22 +3,13 @@ import json
 import os
 import hashlib
 import uuid
-from streamlit_cookies_manager import EncryptedCookieManager
 
 st.set_page_config(page_title="Login Sistemi", page_icon="🔐")
 
+# ------------------ PATH DÜZƏLİŞİ ------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 USERS_FILE = os.path.join(BASE_DIR, "users.json")
-
-
-# ------------------ COOKIE SİSTEMİ ------------------
-cookies = EncryptedCookieManager(
-    prefix="imtahan_app",
-    password="super_secret_key_123"  # istəsən bunu dəyiş
-)
-
-if not cookies.ready():
-    st.stop()
+TOKEN_FILE = os.path.join(BASE_DIR, "device_token.json")
 
 # ------------------ USER YÜKLƏ ------------------
 def load_users():
@@ -34,6 +25,28 @@ def save_users(users):
     with open(USERS_FILE, "w", encoding="utf-8") as f:
         json.dump(users, f, indent=4, ensure_ascii=False)
 
+# ------------------ TOKEN ------------------
+def load_token():
+    if not os.path.exists(TOKEN_FILE):
+        return None
+    try:
+        with open(TOKEN_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return None
+
+def save_token(username):
+    token_data = {
+        "user": username,
+        "token": str(uuid.uuid4())
+    }
+    with open(TOKEN_FILE, "w", encoding="utf-8") as f:
+        json.dump(token_data, f, indent=4, ensure_ascii=False)
+
+def delete_token():
+    if os.path.exists(TOKEN_FILE):
+        os.remove(TOKEN_FILE)
+
 # ------------------ ŞİFRƏ HASH ------------------
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -46,7 +59,7 @@ def register_page():
     password = st.text_input("Şifrə", type="password", key="reg_pass")
     confirm = st.text_input("Şifrəni təsdiqlə", type="password", key="reg_confirm")
 
-    if st.button("Hesab yarat", key="reg_btn"):
+    if st.button("Hesab yarat"):
         users = load_users()
 
         if not username or not password:
@@ -55,8 +68,6 @@ def register_page():
             st.error("Bu istifadəçi artıq mövcuddur")
         elif password != confirm:
             st.error("Şifrələr uyğun deyil")
-        elif len(password) < 4:
-            st.error("Şifrə minimum 4 simvol olmalıdır")
         else:
             users[username] = hash_password(password)
             save_users(users)
@@ -68,9 +79,9 @@ def login_page():
 
     username = st.text_input("İstifadəçi adı", key="login_user")
     password = st.text_input("Şifrə", type="password", key="login_pass")
-    remember = st.checkbox("🖥️ Bu cihazı xatırla")
+    remember = st.checkbox("🖥 Bu cihazı xatırla")
 
-    if st.button("Daxil ol", key="login_btn"):
+    if st.button("Daxil ol"):
         users = load_users()
         hashed = hash_password(password)
 
@@ -79,10 +90,7 @@ def login_page():
             st.session_state.user = username
 
             if remember:
-                token = str(uuid.uuid4())
-                cookies["remember_user"] = username
-                cookies["remember_token"] = token
-                cookies.save()
+                save_token(username)
 
             st.success(f"Xoş gəldin, {username}!")
             st.rerun()
@@ -94,25 +102,29 @@ def dashboard():
     st.success(f"✅ Giriş edildi: {st.session_state.user}")
     st.write("Bu test panelidir — əsas proqram burada olacaq")
 
-    if st.button("Çıxış et", key="logout_btn"):
+    if st.button("🚪 Çıxış et"):
         st.session_state.logged_in = False
-        cookies.pop("remember_user", None)
-        cookies.pop("remember_token", None)
-        cookies.save()
+        delete_token()  # <<< BU ƏN VACİB HİSSƏDİR
         st.rerun()
+
+# ------------------ AUTO LOGIN ------------------
+def auto_login():
+    token_data = load_token()
+    users = load_users()
+
+    if token_data:
+        user = token_data.get("user")
+        if user in users:
+            st.session_state.logged_in = True
+            st.session_state.user = user
 
 # ------------------ ƏSAS ------------------
 def main():
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
+        auto_login()
 
-    # Avtomatik giriş (cihaz xatırlanıbsa)
-    if not st.session_state.logged_in:
-        if "remember_user" in cookies:
-            st.session_state.logged_in = True
-            st.session_state.user = cookies["remember_user"]
-
-    st.title("🔐 İstifadəçi Sistemi")
+    st.title("🔐 İstifadəçi Sistemi (Müstəqil Test)")
 
     if st.session_state.logged_in:
         dashboard()
