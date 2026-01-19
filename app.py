@@ -19,7 +19,7 @@ def load_users():
 
 def save_users(users):
     with open(USERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(users, f, indent=4)
+        json.dump(users, f, indent=4, ensure_ascii=False)
 
 # ------------------ ŞİFRƏ HASH ------------------
 def hash_password(password):
@@ -29,11 +29,11 @@ def hash_password(password):
 def register_page():
     st.subheader("📝 Qeydiyyat")
 
-    username = st.text_input("İstifadəçi adı")
-    password = st.text_input("Şifrə", type="password")
-    confirm = st.text_input("Şifrəni təsdiqlə", type="password")
+    username = st.text_input("İstifadəçi adı", key="reg_user")
+    password = st.text_input("Şifrə", type="password", key="reg_pass")
+    confirm = st.text_input("Şifrəni təsdiqlə", type="password", key="reg_confirm")
 
-    if st.button("Hesab yarat"):
+    if st.button("Hesab yarat", key="reg_btn"):
         users = load_users()
 
         if not username or not password:
@@ -53,10 +53,10 @@ def register_page():
 def login_page():
     st.subheader("🔑 Giriş")
 
-    username = st.text_input("İstifadəçi adı")
-    password = st.text_input("Şifrə", type="password")
+    username = st.text_input("İstifadəçi adı", key="login_user")
+    password = st.text_input("Şifrə", type="password", key="login_pass")
 
-    if st.button("Daxil ol"):
+    if st.button("Daxil ol", key="login_btn"):
         users = load_users()
         hashed = hash_password(password)
 
@@ -73,7 +73,7 @@ def dashboard():
     st.success(f"✅ Giriş edildi: {st.session_state.user}")
     st.write("Bu test panelidir — əsas proqram burada olacaq")
 
-    if st.button("Çıxış et"):
+    if st.button("Çıxış et", key="logout_btn"):
         st.session_state.logged_in = False
         st.rerun()
 
