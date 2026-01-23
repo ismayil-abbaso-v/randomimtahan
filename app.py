@@ -15,7 +15,7 @@ def parse_docx(file):
     paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
     questions = []
 
-    option_pattern = re.compile(r"^[A-Ea-e][\)\.\:\-]\s*(.+)")
+    option_pattern = re.compile(r"^[A-Ea-e]\)")
     question_pattern = re.compile(r"^\d+\s*[.)]")
 
     i = 0
