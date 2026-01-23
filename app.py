@@ -1,6 +1,8 @@
 import streamlit as st
 import re
 import random
+import io
+from PIL import Image
 from docx import Document
 from io import BytesIO
 from datetime import datetime, timedelta
@@ -261,7 +263,13 @@ if st.session_state.page == "exam":
                 
                         # 👇 şəkil MÜTLƏQ form daxilində
                         for img in images:
-                            st.image(img, width=450)
+                            try:
+                                image = Image.open(io.BytesIO(img))
+                                st.image(image, width=450)
+                            except:
+                                # WMF/EMF və açılmayan şəkilləri keç
+                                st.warning("⚠️ Bu sualda dəstəklənməyən şəkil formatı var (məs: WMF/EMF).")
+
                 
                         st.session_state.exam_answers[i] = st.radio(
                             "", options, key=f"q_{i}", label_visibility="collapsed"
