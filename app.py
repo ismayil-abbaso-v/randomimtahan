@@ -13,49 +13,37 @@ st.set_page_config(page_title="İmtahan Hazırlayıcı", page_icon="📝")
 def parse_docx(file):
     doc = Document(file)
     paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
-    questions = []
-
-    option_pattern = re.compile(r"^[A-Ea-e]\)")
-    question_pattern = re.compile(r"^\d+\s*[.)]")
-
+    
+    question_blocks = []
     i = 0
+
+    question_pattern = re.compile(r"^\d+\s*[.)]\s*")
+    option_pattern = re.compile(r"^[A-Ea-e]\)")
+
     while i < len(paragraphs):
-        if not question_pattern.match(paragraphs[i]):
-            i += 1
-            continue
-
-        # 🔹 Sualın başlanğıcı
-        question_lines = [re.sub(r"^\d+\s*[.)]\s*", "", paragraphs[i])]
-        i += 1
-
-        # 🔹 Aşağıdan yuxarı variantları tapmaq üçün müvəqqəti siyahı
-        temp_lines = []
-
-        while i < len(paragraphs) and not question_pattern.match(paragraphs[i]):
-            temp_lines.append(paragraphs[i])
+        if question_pattern.match(paragraphs[i]):
+            question_lines = [re.sub(question_pattern, "", paragraphs[i])]
             i += 1
 
-        # 🔹 Variantları AŞAĞIDAN YUXARI yığırıq
-        options = []
-        for line in reversed(temp_lines):
-            match = option_pattern.match(line)
-            if match:
-                options.insert(0, match.group(1).strip())
-            else:
-                if options:
-                    break
+            # SUAL MƏTNİ — A) görünənə qədər
+            while i < len(paragraphs) and not option_pattern.match(paragraphs[i]):
+                question_lines.append(paragraphs[i])
+                i += 1
 
-        # 🔹 Variant olmayan hissə → sual mətni
-        non_option_count = len(temp_lines) - len(options)
-        question_lines.extend(temp_lines[:non_option_count])
+            # VARİANTLAR — yalnız A)–E)
+            options = []
+            while i < len(paragraphs) and option_pattern.match(paragraphs[i]):
+                options.append(paragraphs[i][2:].strip())
+                i += 1
 
-        if 4 <= len(options) <= 5:
-            questions.append((
-                " ".join(question_lines).strip(),
-                options
-            ))
+            if len(options) >= 4:
+                question_blocks.append(
+                    (" ".join(question_lines), options)
+                )
+        else:
+            i += 1
 
-    return questions
+    return question_blocks
 
 @st.cache_data
 
