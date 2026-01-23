@@ -262,7 +262,7 @@ if st.session_state.page == "exam":
                         st.markdown(f"**{i+1}) {qtext}**")
                         # 👇 şəkillər
                         for img in images:
-                        st.image(img, width=450)
+                            st.image(img, width=450)
                         st.session_state.exam_answers[i] = st.radio("", options, key=f"q_{i}", label_visibility="collapsed")
                     submitted = st.form_submit_button("📤 İmtahanı Bitir")
                     if submitted:
