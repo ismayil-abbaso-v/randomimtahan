@@ -223,7 +223,11 @@ if st.session_state.page == "exam":
 
                 with st.form("exam_form"):
                     for i, (qtext, options, _) in enumerate(st.session_state.exam_questions):
-                        st.markdown(f"**{i+1}) {qtext}**")
+                        st.markdown(
+                            f"<b>{i+1})</b><br>{qtext.replace(chr(10), '<br>')}",
+                            unsafe_allow_html=True
+                        )
+
                         st.session_state.exam_answers[i] = st.radio("", options, key=f"q_{i}", label_visibility="collapsed")
                     submitted = st.form_submit_button("📤 İmtahanı Bitir")
                     if submitted:
