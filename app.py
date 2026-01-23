@@ -9,6 +9,17 @@ st.set_page_config(page_title="İmtahan Hazırlayıcı", page_icon="📝")
 
 @st.cache_data
 
+def get_images_from_paragraph(paragraph):
+    images = []
+    for run in paragraph.runs:
+        if "graphic" in run._element.xml:
+            for rel in paragraph.part._rels.values():
+                if "image" in rel.target_ref:
+                    images.append(rel.target_part.blob)
+    return images
+
+
+@st.cache_data
 def parse_docx(file):
     doc = Document(file)
     question_blocks = []
@@ -24,6 +35,7 @@ def parse_docx(file):
     while i < len(paragraphs):
         para = paragraphs[i]
         text = ''.join(run.text for run in para.runs).strip()
+
         if not text:
             i += 1
             continue
@@ -31,33 +43,43 @@ def parse_docx(file):
         q_match = question_pattern.match(text)
         if q_match or is_numbered_paragraph(para):
             question_text = q_match.group(2).strip() if q_match else text.strip()
+            question_images = get_images_from_paragraph(para)
             i += 1
             options = []
 
             while i < len(paragraphs):
-                option_text = ''.join(run.text for run in paragraphs[i].runs).strip()
+                p = paragraphs[i]
+                option_text = ''.join(run.text for run in p.runs).strip()
+
+                # şəkil varsa əlavə et
+                imgs = get_images_from_paragraph(p)
+                if imgs:
+                    question_images.extend(imgs)
+
                 if not option_text:
                     i += 1
                     continue
+
                 if question_pattern.match(option_text):
                     break
+
                 match = option_pattern.match(option_text)
                 if match:
                     options.append(match.group(1).strip())
-                    i += 1
                 else:
                     if len(options) < 5:
                         options.append(option_text)
-                        i += 1
                     else:
                         break
+                i += 1
 
             if len(options) >= 2:
-                question_blocks.append((question_text, options))
+                question_blocks.append((question_text, options, question_images))
         else:
             i += 1
 
     return question_blocks
+
 
 @st.cache_data
 
@@ -206,11 +228,12 @@ if st.session_state.page == "exam":
             if mode != "🔻 Aralıqdan sual seçimi" and not st.session_state.exam_started:
                 if st.button("🚀 İmtahana Başla"):
                     shuffled_questions = []
-                    for q_text, opts in selected:
+                    for q_text, opts, imgs in selected:
                         correct = opts[0]
                         shuffled = opts[:]
                         random.shuffle(shuffled)
-                        shuffled_questions.append((q_text, shuffled, correct))
+                        shuffled_questions.append((q_text, shuffled, correct, imgs))
+
 
                     st.session_state.exam_questions = shuffled_questions
                     st.session_state.exam_answers = [None] * len(shuffled_questions)
@@ -235,8 +258,11 @@ if st.session_state.page == "exam":
                     st.info("ℹ️ Bu rejimdə zaman məhdudiyyəti yoxdur.")
 
                 with st.form("exam_form"):
-                    for i, (qtext, options, _) in enumerate(st.session_state.exam_questions):
+                    for i, (qtext, options, _, images) in enumerate(st.session_state.exam_questions):
                         st.markdown(f"**{i+1}) {qtext}**")
+                        # 👇 şəkillər
+                        for img in images:
+                        st.image(img, width=450)
                         st.session_state.exam_answers[i] = st.radio("", options, key=f"q_{i}", label_visibility="collapsed")
                     submitted = st.form_submit_button("📤 İmtahanı Bitir")
                     if submitted:
@@ -245,7 +271,7 @@ if st.session_state.page == "exam":
 
             elif st.session_state.exam_submitted:
                 st.success("🎉 İmtahan tamamlandı!")
-                correct_list = [correct for _, _, correct in st.session_state.exam_questions]
+                correct_list = [correct for _, _, correct, _ in st.session_state.exam_questions]
                 score = sum(1 for a, b in zip(st.session_state.exam_answers, correct_list) if a == b)
                 total = len(correct_list)
                 percent = (score / total) * 100
@@ -255,9 +281,13 @@ if st.session_state.page == "exam":
                 st.progress(score / total)
 
                 with st.expander("📊 Detallı nəticələr"):
-                    for i, (ua, ca, (qtext, _, _)) in enumerate(zip(st.session_state.exam_answers, correct_list, st.session_state.exam_questions)):
+                    for i, (ua, ca, (qtext, _, _, images)) in enumerate(zip(st.session_state.exam_answers, correct_list, st.session_state.exam_questions)):
                         status = "✅ Düzgün" if ua == ca else "❌ Səhv"
                         st.markdown(f"**{i+1}) {qtext}**\n• Sənin cavabın: {ua}\n• Doğru cavab: {ca} → {status}")
+                        # 👇 Suala aid şəkilləri göstər
+                        for img in images:
+                            st.image(img, width=300)
+
 
                 if st.button("🔁 Yenidən Başla"):
                     keys_to_clear = [k for k in st.session_state if k.startswith("q_") or k in [
