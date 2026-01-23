@@ -38,7 +38,7 @@ def parse_docx(file):
 
             if len(options) >= 4:
                 question_blocks.append(
-                    (" ".join(question_lines), options)
+                    ("/n".join(question_lines), options)
                 )
         else:
             i += 1
