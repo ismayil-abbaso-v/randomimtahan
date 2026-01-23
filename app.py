@@ -1,85 +1,61 @@
 import streamlit as st
 import re
 import random
-import io
-from PIL import Image
 from docx import Document
 from io import BytesIO
 from datetime import datetime, timedelta
 
 st.set_page_config(page_title="İmtahan Hazırlayıcı", page_icon="📝")
 
+@st.cache_data
 
-def get_images_from_paragraph(paragraph):
-    images = []
-    for run in paragraph.runs:
-        if "graphic" in run._element.xml:
-            for rel in paragraph.part._rels.values():
-                if "image" in rel.target_ref:
-                    images.append(rel.target_part.blob)
-    return images
-
-
+@st.cache_data
 def parse_docx(file):
     doc = Document(file)
-    question_blocks = []
-    paragraphs = list(doc.paragraphs)
+    paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+    questions = []
+
+    option_pattern = re.compile(r"^[A-Ea-e][\)\.\:\-]\s*(.+)")
+    question_pattern = re.compile(r"^\d+\s*[.)]")
+
     i = 0
-
-    option_pattern = re.compile(r"^\s*[A-Ea-e][\)\.\:\-\s]+(.*)")
-    question_pattern = re.compile(r"^\s*(\d+)\s*[.)]\s*(.*)")
-
-    def is_numbered_paragraph(para):
-        return para._p.pPr is not None and para._p.pPr.numPr is not None
-
     while i < len(paragraphs):
-        para = paragraphs[i]
-        text = ''.join(run.text for run in para.runs).strip()
-
-        if not text:
+        if not question_pattern.match(paragraphs[i]):
             i += 1
             continue
 
-        q_match = question_pattern.match(text)
-        if q_match or is_numbered_paragraph(para):
-            question_text = q_match.group(2).strip() if q_match else text.strip()
-            question_images = get_images_from_paragraph(para)
+        # 🔹 Sualın başlanğıcı
+        question_lines = [re.sub(r"^\d+\s*[.)]\s*", "", paragraphs[i])]
+        i += 1
+
+        # 🔹 Aşağıdan yuxarı variantları tapmaq üçün müvəqqəti siyahı
+        temp_lines = []
+
+        while i < len(paragraphs) and not question_pattern.match(paragraphs[i]):
+            temp_lines.append(paragraphs[i])
             i += 1
-            options = []
 
-            while i < len(paragraphs):
-                p = paragraphs[i]
-                option_text = ''.join(run.text for run in p.runs).strip()
-
-                # şəkil varsa əlavə et
-                imgs = get_images_from_paragraph(p)
-                if imgs:
-                    question_images.extend(imgs)
-
-                if not option_text:
-                    i += 1
-                    continue
-
-                if question_pattern.match(option_text):
+        # 🔹 Variantları AŞAĞIDAN YUXARI yığırıq
+        options = []
+        for line in reversed(temp_lines):
+            match = option_pattern.match(line)
+            if match:
+                options.insert(0, match.group(1).strip())
+            else:
+                if options:
                     break
 
-                match = option_pattern.match(option_text)
-                if match:
-                    options.append(match.group(1).strip())
-                else:
-                    if len(options) < 5:
-                        options.append(option_text)
-                    else:
-                        break
-                i += 1
+        # 🔹 Variant olmayan hissə → sual mətni
+        non_option_count = len(temp_lines) - len(options)
+        question_lines.extend(temp_lines[:non_option_count])
 
-            if len(options) >= 2:
-                question_blocks.append((question_text, options, question_images))
-        else:
-            i += 1
+        if 4 <= len(options) <= 5:
+            questions.append((
+                " ".join(question_lines).strip(),
+                options
+            ))
 
-    return question_blocks
-
+    return questions
 
 @st.cache_data
 
@@ -228,12 +204,11 @@ if st.session_state.page == "exam":
             if mode != "🔻 Aralıqdan sual seçimi" and not st.session_state.exam_started:
                 if st.button("🚀 İmtahana Başla"):
                     shuffled_questions = []
-                    for q_text, opts, imgs in selected:
+                    for q_text, opts in selected:
                         correct = opts[0]
                         shuffled = opts[:]
                         random.shuffle(shuffled)
-                        shuffled_questions.append((q_text, shuffled, correct, imgs))
-
+                        shuffled_questions.append((q_text, shuffled, correct))
 
                     st.session_state.exam_questions = shuffled_questions
                     st.session_state.exam_answers = [None] * len(shuffled_questions)
@@ -258,34 +233,17 @@ if st.session_state.page == "exam":
                     st.info("ℹ️ Bu rejimdə zaman məhdudiyyəti yoxdur.")
 
                 with st.form("exam_form"):
-                    for i, (qtext, options, _, images) in enumerate(st.session_state.exam_questions):
+                    for i, (qtext, options, _) in enumerate(st.session_state.exam_questions):
                         st.markdown(f"**{i+1}) {qtext}**")
-                
-                        # 👇 şəkil MÜTLƏQ form daxilində
-                        for img in images:
-                            try:
-                                image = Image.open(io.BytesIO(img))
-                                st.image(image, width=450)
-                            except:
-                                # WMF/EMF və açılmayan şəkilləri keç
-                                st.warning("⚠️ Bu sualda dəstəklənməyən şəkil formatı var (məs: WMF/EMF).")
-
-                
-                        st.session_state.exam_answers[i] = st.radio(
-                            "", options, key=f"q_{i}", label_visibility="collapsed"
-                        )
-                
-                    # 👇 submit button MÜTLƏQ ən sonda və form daxilində
+                        st.session_state.exam_answers[i] = st.radio("", options, key=f"q_{i}", label_visibility="collapsed")
                     submitted = st.form_submit_button("📤 İmtahanı Bitir")
-                
                     if submitted:
                         st.session_state.exam_submitted = True
                         st.rerun()
 
-
             elif st.session_state.exam_submitted:
                 st.success("🎉 İmtahan tamamlandı!")
-                correct_list = [correct for _, _, correct, _ in st.session_state.exam_questions]
+                correct_list = [correct for _, _, correct in st.session_state.exam_questions]
                 score = sum(1 for a, b in zip(st.session_state.exam_answers, correct_list) if a == b)
                 total = len(correct_list)
                 percent = (score / total) * 100
@@ -295,13 +253,9 @@ if st.session_state.page == "exam":
                 st.progress(score / total)
 
                 with st.expander("📊 Detallı nəticələr"):
-                    for i, (ua, ca, (qtext, _, _, images)) in enumerate(zip(st.session_state.exam_answers, correct_list, st.session_state.exam_questions)):
+                    for i, (ua, ca, (qtext, _, _)) in enumerate(zip(st.session_state.exam_answers, correct_list, st.session_state.exam_questions)):
                         status = "✅ Düzgün" if ua == ca else "❌ Səhv"
                         st.markdown(f"**{i+1}) {qtext}**\n• Sənin cavabın: {ua}\n• Doğru cavab: {ca} → {status}")
-                        # 👇 Suala aid şəkilləri göstər
-                        for img in images:
-                            st.image(img, width=300)
-
 
                 if st.button("🔁 Yenidən Başla"):
                     keys_to_clear = [k for k in st.session_state if k.startswith("q_") or k in [
@@ -522,4 +476,3 @@ Yalnız `.docx` formatında Word sənədləri istifadə olunmalıdır.
 
 Uğurlar və uğurlu nəticələr!
 """)
-
