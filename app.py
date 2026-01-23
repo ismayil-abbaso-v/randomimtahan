@@ -258,14 +258,22 @@ if st.session_state.page == "exam":
                 with st.form("exam_form"):
                     for i, (qtext, options, _, images) in enumerate(st.session_state.exam_questions):
                         st.markdown(f"**{i+1}) {qtext}**")
-                        # 👇 şəkillər
+                
+                        # 👇 şəkil MÜTLƏQ form daxilində
                         for img in images:
                             st.image(img, width=450)
-                        st.session_state.exam_answers[i] = st.radio("", options, key=f"q_{i}", label_visibility="collapsed")
+                
+                        st.session_state.exam_answers[i] = st.radio(
+                            "", options, key=f"q_{i}", label_visibility="collapsed"
+                        )
+                
+                    # 👇 submit button MÜTLƏQ ən sonda və form daxilində
                     submitted = st.form_submit_button("📤 İmtahanı Bitir")
+                
                     if submitted:
                         st.session_state.exam_submitted = True
                         st.rerun()
+
 
             elif st.session_state.exam_submitted:
                 st.success("🎉 İmtahan tamamlandı!")
