@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 
 st.set_page_config(page_title="İmtahan Hazırlayıcı", page_icon="📝")
 
-@st.cache_data
 
 def get_images_from_paragraph(paragraph):
     images = []
@@ -19,7 +18,6 @@ def get_images_from_paragraph(paragraph):
     return images
 
 
-@st.cache_data
 def parse_docx(file):
     doc = Document(file)
     question_blocks = []
